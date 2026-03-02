@@ -1,0 +1,97 @@
+name: Release Debug APK
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-debug-apk:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          BUILD_NUMBER=${{ github.run_number }}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: debug-v${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}
+          release_name: Hisab Debug v${{ steps.version.outputs.version }} (Build ${{ steps.version.outputs.build }})
+          body: |
+            ## Hisab Debug APK 🧪
+            
+            **ভার্সন:** ${{ steps.version.outputs.version }}
+            **বিল্ড:** ${{ steps.version.outputs.build }}
+            **কমিট:** ${{ github.sha }}
+            
+            ⚠️ **এটি একটি ডিবাগ বিল্ড।** টেস্টিং এর জন্য ব্যবহার করুন।
+            
+            ### ইনস্টলেশন
+            1. APK ডাউনলোড করুন
+            2. Settings > Security > Unknown Sources অন করুন
+            3. APK ইনস্টল করুন
+          draft: false
+          prerelease: true
+
+      - name: Upload APK to Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: android/app/build/outputs/apk/debug/app-debug.apk
+          asset_name: Hisab-Debug-v${{ steps.version.outputs.version }}.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hisab-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7

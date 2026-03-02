@@ -1,0 +1,127 @@
+name: Release APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Step 3: Setup Java
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Step 4: Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Step 5: Expo Prebuild (Generate native code)
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --clean
+
+      # Step 6: Make gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # Step 7: Build APK
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      # Step 8: Get version from package.json
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Step 9: Get current date
+      - name: Get date
+        id: date
+        run: |
+          DATE=$(date +'%Y%m%d')
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+
+      # Step 10: Create Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}-${{ steps.date.outputs.date }}
+          release_name: Hisab v${{ steps.version.outputs.version }} (${{ steps.date.outputs.date }})
+          body: |
+            ## Hisab - হিসাব নিকাশ
+            
+            ### নতুন রিলিজ 🎉
+            
+            **ভার্সন:** v${{ steps.version.outputs.version }}
+            **তারিখ:** ${{ steps.date.outputs.date }}
+            
+            ### ফিচারসমূহ
+            - 🔐 Google Sign-In (OAuth 2.0)
+            - 💰 আয় ও ব্যয় ট্র্যাকিং
+            - ☁️ Google Drive ব্যাকআপ
+            - 📎 মেমো সংযুক্তি
+            - 🎨 প্রিমিয়াম ডার্ক থিম
+            
+            ### ইনস্টলেশন
+            1. APK ফাইল ডাউনলোড করুন
+            2. Android ডিভাইসে ইনস্টল করুন
+            3. Google অ্যাকাউন্ট দিয়ে সাইন ইন করুন
+            
+            ### নোট
+            - Android 8.0+ প্রয়োজন
+            - Google Play Services প্রয়োজন
+          draft: false
+          prerelease: false
+
+      # Step 11: Upload APK to Release
+      - name: Upload APK
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: android/app/build/outputs/apk/release/app-release.apk
+          asset_name: Hisab-v${{ steps.version.outputs.version }}.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      # Step 12: Upload APK as artifact (backup)
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hisab-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      # Step 13: Success notification
+      - name: Success
+        run: |
+          echo "✅ APK Build & Release Successful!"
+          echo "📦 Version: v${{ steps.version.outputs.version }}"
+          echo "📅 Date: ${{ steps.date.outputs.date }}"
+          echo "🔗 Release URL: ${{ steps.create_release.outputs.html_url }}"
