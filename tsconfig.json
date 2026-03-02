@@ -18,7 +18,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "declarations.d.ts"      // ✅ Add this line for Feather icons fix
   ],
   "exclude": [
     "node_modules",
